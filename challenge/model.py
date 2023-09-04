@@ -1,6 +1,11 @@
 import pandas as pd
-
+from datetime import datetime
 from typing import Tuple, Union, List
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
+import xgboost as xgb
+from xgboost import plot_importance
 
 class DelayModel:
 
@@ -8,12 +13,28 @@ class DelayModel:
         self
     ):
         self._model = None # Model should be saved in this attribute.
+        self.target = None
+       
+    def data_balance(self, y_train):
+        n_y0 = len(y_train[y_train == 0])
+        n_y1 = len(y_train[y_train == 1])
+        scale = n_y0/n_y1
+        return scale
 
+    def get_min_diff(self, data:pd.DataFrame):
+        """Get the difference in Minutes of the Date and time of flight operation,
+        and the Scheduled date and time of the flight"""
+
+        fecha_o = datetime.strptime(data['Fecha-O'], '%Y-%m-%d %H:%M:%S')
+        fecha_i = datetime.strptime(data['Fecha-I'], '%Y-%m-%d %H:%M:%S')
+        min_diff = ((fecha_o - fecha_i).total_seconds())/60
+        return min_diff
+    
     def preprocess(
         self,
         data: pd.DataFrame,
         target_column: str = None
-    ) -> Union(Tuple[pd.DataFrame, pd.DataFrame], pd.DataFrame):
+    ) -> Union[Tuple[pd.DataFrame, pd.DataFrame], pd.DataFrame]:
         """
         Prepare raw data for training or predict.
 
@@ -26,7 +47,37 @@ class DelayModel:
             or
             pd.DataFrame: features.
         """
-        return
+        data['min_diff'] = data.apply(self.get_min_diff, axis = 1)
+        # Calculate the delay
+        threshold_in_minutes = 15
+        data['delay'] = np.where(data['min_diff'] > threshold_in_minutes, 1, 0)
+        # Get features and taget
+        features = pd.concat([
+        pd.get_dummies(data['OPERA'], prefix = 'OPERA'),
+        pd.get_dummies(data['TIPOVUELO'], prefix = 'TIPOVUELO'), 
+        pd.get_dummies(data['MES'], prefix = 'MES')], axis = 1)
+        
+        if target_column != None:
+            target = pd.DataFrame(data[target_column])
+            self.target = target
+
+        top_10_features = [
+        "OPERA_Latin American Wings", 
+        "MES_7",
+        "MES_10",
+        "OPERA_Grupo LATAM",
+        "MES_12",
+        "TIPOVUELO_I",
+        "MES_4",
+        "MES_11",
+        "OPERA_Sky Airline",
+        "OPERA_Copa Air"]
+        
+        if target_column == None:
+            self.target = pd.DataFrame(data["delay"])
+            return features[top_10_features]
+        else:
+            return features[top_10_features], target
 
     def fit(
         self,
@@ -40,6 +91,9 @@ class DelayModel:
             features (pd.DataFrame): preprocessed data.
             target (pd.DataFrame): target.
         """
+        scale = self.data_balance(target.squeeze())
+        self._model = xgb.XGBClassifier(random_state=1, learning_rate=0.01, scale_pos_weight = scale)
+        self._model.fit(features, target.squeeze())
         return
 
     def predict(
@@ -55,4 +109,6 @@ class DelayModel:
         Returns:
             (List[int]): predicted targets.
         """
-        return
+        if self._model == None:
+            self.fit(features, self.target)
+        return self._model.predict(features).tolist()
