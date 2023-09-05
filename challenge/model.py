@@ -47,20 +47,6 @@ class DelayModel:
             or
             pd.DataFrame: features.
         """
-        data['min_diff'] = data.apply(self.get_min_diff, axis = 1)
-        # Calculate the delay
-        threshold_in_minutes = 15
-        data['delay'] = np.where(data['min_diff'] > threshold_in_minutes, 1, 0)
-        # Get features and taget
-        features = pd.concat([
-        pd.get_dummies(data['OPERA'], prefix = 'OPERA'),
-        pd.get_dummies(data['TIPOVUELO'], prefix = 'TIPOVUELO'), 
-        pd.get_dummies(data['MES'], prefix = 'MES')], axis = 1)
-        
-        if target_column != None:
-            target = pd.DataFrame(data[target_column])
-            self.target = target
-
         top_10_features = [
         "OPERA_Latin American Wings", 
         "MES_7",
@@ -72,12 +58,29 @@ class DelayModel:
         "MES_11",
         "OPERA_Sky Airline",
         "OPERA_Copa Air"]
-        
+
         if target_column == None:
-            self.target = pd.DataFrame(data["delay"])
-            return features[top_10_features]
-        else:
-            return features[top_10_features], target
+            features = pd.concat([
+            pd.get_dummies(data['OPERA'], prefix = 'OPERA'),
+            pd.get_dummies(data['TIPOVUELO'], prefix = 'TIPOVUELO'), 
+            pd.get_dummies(data['MES'], prefix = 'MES')], axis = 1)
+            features = features.reindex(columns=top_10_features)
+            return features
+
+        data['min_diff'] = data.apply(self.get_min_diff, axis = 1)
+        # Calculate the delay
+        threshold_in_minutes = 15
+        data['delay'] = np.where(data['min_diff'] > threshold_in_minutes, 1, 0)
+        # Get features and taget
+        features = pd.concat([
+        pd.get_dummies(data['OPERA'], prefix = 'OPERA'),
+        pd.get_dummies(data['TIPOVUELO'], prefix = 'TIPOVUELO'), 
+        pd.get_dummies(data['MES'], prefix = 'MES')], axis = 1)
+        
+        target = pd.DataFrame(data[target_column])
+        self.target = target
+    
+        return features[top_10_features], target
 
     def fit(
         self,
