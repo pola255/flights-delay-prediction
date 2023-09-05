@@ -90,8 +90,9 @@ class TestModel(unittest.TestCase):
     def test_model_predict(
         self
     ):
-        features = self.model.preprocess(
-            data=self.data
+        features, _ = self.model.preprocess(
+            data=self.data,
+            target_column="delay"
         )
 
         predicted_targets = self.model.predict(
